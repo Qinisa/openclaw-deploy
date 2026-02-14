@@ -82,10 +82,10 @@ if id "$USERNAME" &>/dev/null; then
 else
     adduser --disabled-password --gecos "" "$USERNAME"
     usermod -aG sudo "$USERNAME"
-    # Allow passwordless sudo for initial setup (can be tightened later)
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/${USERNAME}"
-    chmod 440 "/etc/sudoers.d/${USERNAME}"
-    ok "User '${USERNAME}' created with sudo access."
+    # Set a password for the user (required for sudo)
+    echo -e "${CYAN}Set a password for '${USERNAME}' (needed for sudo):${NC}"
+    passwd "$USERNAME"
+    ok "User '${USERNAME}' created with sudo access (password required for sudo)."
 fi
 
 # SSH key
@@ -108,7 +108,10 @@ log "Phase 2: Hardening SSH..."
 # Disable root login
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 
-# Disable password authentication
+# Disable password authentication in main config
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+# Also enforce via sshd_config.d drop-in (belt and suspenders)
 cat > /etc/ssh/sshd_config.d/hardening.conf << 'SSHEOF'
 PasswordAuthentication no
 PubkeyAuthentication yes
@@ -120,7 +123,7 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 SSHEOF
 
-# Remove cloud-init SSH override if present
+# Remove cloud-init SSH override if present (often re-enables password auth)
 rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf
 
 systemctl restart ssh
@@ -134,11 +137,14 @@ log "Phase 3: Configuring firewall..."
 apt-get update -qq
 apt-get install -y -qq ufw > /dev/null 2>&1
 
+# Set defaults before enabling — deny first, then whitelist
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp comment "SSH"
+
+# Enable (--force skips interactive prompt)
 ufw --force enable
-ok "UFW enabled: deny incoming, allow SSH."
+ok "UFW enabled: default deny incoming, SSH (22/tcp) allowed."
 
 # ============================================================================
 # PHASE 4: Fail2ban
