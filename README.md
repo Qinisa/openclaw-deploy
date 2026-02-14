@@ -45,7 +45,11 @@ This configures OpenClaw (API keys, Telegram bot, etc.) and installs it as a sys
 
 ## Maintenance
 
-Copy `update.sh` to your VPS and run as the `clawdbot` user:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash
+```
+
+Or with options:
 
 ```bash
 # Full update (system + OpenClaw + verify)
