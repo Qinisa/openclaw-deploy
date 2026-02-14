@@ -22,7 +22,7 @@
 #  11. Verifies everything
 #
 # Designed for: Ubuntu 24.04 LTS on Hetzner Cloud
-# Author: CrawBot 🦞 / QINISA.AI
+# Author: CrawBot 🦞
 # ============================================================================
 
 set -euo pipefail
