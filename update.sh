@@ -37,24 +37,36 @@ fi
 if [[ "$MODE" == "all" || "$MODE" == "--openclaw-only" ]]; then
     CURRENT=$(openclaw --version 2>/dev/null || echo "unknown")
     log "Current OpenClaw version: ${CURRENT}"
-    log "Updating OpenClaw..."
 
-    npm install -g openclaw@latest
+    # Recommended: re-run the official installer (detects existing installs, upgrades in place)
+    log "Updating OpenClaw via official installer..."
+    curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard
+
     NEW=$(openclaw --version 2>/dev/null || echo "unknown")
 
     if [[ "$CURRENT" != "$NEW" ]]; then
         ok "OpenClaw updated: ${CURRENT} → ${NEW}"
-        log "Restarting OpenClaw gateway..."
-        sudo systemctl restart openclaw
-        sleep 3
-        if systemctl is-active --quiet openclaw; then
-            ok "Gateway restarted successfully."
-        else
-            err "Gateway failed to start! Check: journalctl -u openclaw -n 50"
-        fi
     else
         ok "OpenClaw already at latest version (${CURRENT})."
     fi
+
+    # Run doctor to handle config migrations, health checks, and service entrypoint updates
+    log "Running openclaw doctor..."
+    openclaw doctor || warn "Doctor reported issues — review output above."
+
+    # Restart gateway
+    log "Restarting OpenClaw gateway..."
+    openclaw gateway restart 2>/dev/null || sudo systemctl restart openclaw
+    sleep 3
+    if systemctl is-active --quiet openclaw; then
+        ok "Gateway restarted successfully."
+    else
+        err "Gateway failed to start! Check: journalctl -u openclaw -n 50"
+    fi
+
+    # Post-update health check
+    log "Running health check..."
+    openclaw health || warn "Health check reported issues."
 fi
 
 # --- Verification ---
