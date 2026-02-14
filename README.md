@@ -33,9 +33,15 @@ SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" bash deploy.sh
 | 8 | Installs Node.js 22 LTS |
 | 9 | Installs OpenClaw |
 | 10 | Installs Chrome (headless, for browser tools) |
-| 11 | Creates systemd service (auto-restart, boot-on-startup) |
-| 12 | Runs OpenClaw setup wizard (interactive) |
-| 13 | Verification checklist |
+| 11 | Verification checklist |
+
+After the script completes, log in as `clawdbot` and run:
+
+```bash
+openclaw onboard --install-daemon
+```
+
+This configures OpenClaw (API keys, Telegram bot, etc.) and installs it as a system daemon.
 
 ## Maintenance
 
@@ -53,21 +59,6 @@ bash update.sh --system-only
 
 # Just run verification checks
 bash update.sh --verify-only
-```
-
-## Managing the Service
-
-```bash
-# Start/stop/restart
-sudo systemctl start openclaw
-sudo systemctl stop openclaw
-sudo systemctl restart openclaw
-
-# Status
-sudo systemctl status openclaw
-
-# Logs
-journalctl -u openclaw -f
 ```
 
 ## Requirements

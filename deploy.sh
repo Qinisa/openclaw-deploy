@@ -17,9 +17,9 @@
 #   6. Applies kernel hardening
 #   7. Installs Node.js 22 LTS via NodeSource
 #   8. Installs OpenClaw globally
-#   9. Runs OpenClaw setup wizard
-#  10. Installs systemd service
-#  11. Verifies everything
+#   9. Installs Chrome (headless)
+#  10. Verifies everything
+#  11. Prompts user to log in as clawdbot and run: openclaw onboard --install-daemon
 #
 # Designed for: Ubuntu 24.04 LTS on Hetzner Cloud
 # Author: CrawBot 🦞
@@ -265,73 +265,10 @@ else
 fi
 
 # ============================================================================
-# PHASE 11: Systemd Service
-# ============================================================================
-log "Phase 11: Creating systemd service..."
-
-cat > /etc/systemd/system/openclaw.service << SVCEOF
-[Unit]
-Description=OpenClaw Gateway
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${USERNAME}
-Group=${USERNAME}
-WorkingDirectory=/home/${USERNAME}
-Environment=HOME=/home/${USERNAME}
-Environment=PATH=/home/${USERNAME}/.npm-global/bin:/usr/bin:/bin
-ExecStart=/home/${USERNAME}/.npm-global/bin/openclaw gateway start --foreground
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=openclaw
-
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/home/${USERNAME}/.openclaw
-ReadWritePaths=/home/${USERNAME}/.npm-global
-ReadWritePaths=/tmp
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-
-systemctl daemon-reload
-systemctl enable openclaw
-ok "Systemd service created and enabled."
-
-# ============================================================================
-# PHASE 12: OpenClaw Configuration
-# ============================================================================
-log "Phase 12: OpenClaw configuration..."
-echo ""
-echo -e "${YELLOW}OpenClaw needs to be configured. You have two options:${NC}"
-echo "  1) Run the interactive setup wizard now"
-echo "  2) Skip and configure manually later"
-echo ""
-read -p "Run setup wizard now? [Y/n] " -r WIZARD_CHOICE
-WIZARD_CHOICE=${WIZARD_CHOICE:-Y}
-
-if [[ "$WIZARD_CHOICE" =~ ^[Yy]$ ]]; then
-    log "Launching OpenClaw configure wizard..."
-    sudo -u "$USERNAME" bash -c 'export PATH="$HOME/.npm-global/bin:$PATH" && openclaw configure'
-    ok "OpenClaw configured."
-else
-    warn "Skipped. Run 'openclaw configure' as ${USERNAME} to set up later."
-    warn "Then start with: sudo systemctl start openclaw"
-fi
-
-# ============================================================================
-# PHASE 13: Verification
+# PHASE 11: Verification
 # ============================================================================
 echo ""
-log "Phase 13: Running verification checks..."
+log "Phase 11: Running verification checks..."
 echo ""
 
 PASS=0
@@ -358,7 +295,6 @@ check "Kernel: SYN cookies enabled" "[[ \$(sysctl -n net.ipv4.tcp_syncookies) ==
 check "Node.js: installed"          "node -v | grep -q 'v${NODE_MAJOR}'"
 check "OpenClaw: installed"         "sudo -u ${USERNAME} bash -c 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\" && openclaw --version'"
 check "Chrome: installed"           "command -v google-chrome"
-check "Systemd: service exists"     "systemctl list-unit-files | grep -q openclaw"
 check "Auto-updates: enabled"       "systemctl is-active unattended-upgrades"
 
 echo ""
@@ -368,18 +304,29 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 
 if [[ $FAIL -eq 0 ]]; then
-    echo -e "${GREEN}VPS is hardened and OpenClaw is ready!${NC}"
+    echo -e "${GREEN}VPS is hardened and OpenClaw is installed!${NC}"
 else
     warn "Some checks failed. Review the output above."
 fi
 
-echo ""
-echo -e "${CYAN}Next steps:${NC}"
-echo "  1. Test SSH access:  ssh ${USERNAME}@$(hostname -I | awk '{print $1}')"
-echo "  2. Start OpenClaw:   sudo systemctl start openclaw"
-echo "  3. Check status:     sudo systemctl status openclaw"
-echo "  4. View logs:        journalctl -u openclaw -f"
+VPS_IP=$(hostname -I | awk '{print $1}')
+
 echo ""
 echo -e "${YELLOW}⚠  Reboot recommended to apply kernel changes:  sudo reboot${NC}"
 echo ""
-echo -e "🦞 ${CYAN}Deploy complete.${NC}"
+echo -e "${CYAN}════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  NEXT: Complete OpenClaw Setup${NC}"
+echo -e "${CYAN}════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "  1. From your local machine, SSH in as the new user:"
+echo ""
+echo -e "     ${GREEN}ssh ${USERNAME}@${VPS_IP}${NC}"
+echo ""
+echo -e "  2. Run the OpenClaw onboarding wizard:"
+echo ""
+echo -e "     ${GREEN}openclaw onboard --install-daemon${NC}"
+echo ""
+echo -e "  This will configure OpenClaw (API keys, Telegram bot,"
+echo -e "  etc.) and install it as a system daemon."
+echo ""
+echo -e "🦞 ${CYAN}Server hardening complete. Log in as ${USERNAME} to finish setup.${NC}"
