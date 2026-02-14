@@ -89,7 +89,3 @@ journalctl -u openclaw -f
 ## License
 
 MIT
-
----
-
-Built by [QINISA.AI](https://qinisa.ai) 🦞
