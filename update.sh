@@ -39,7 +39,7 @@ if [[ "$MODE" == "all" || "$MODE" == "--openclaw-only" ]]; then
     log "Current OpenClaw version: ${CURRENT}"
     log "Updating OpenClaw..."
 
-    npm update -g openclaw
+    npm install -g openclaw@latest
     NEW=$(openclaw --version 2>/dev/null || echo "unknown")
 
     if [[ "$CURRENT" != "$NEW" ]]; then
