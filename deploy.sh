@@ -283,10 +283,10 @@ FAIL=0
 check() {
     if eval "$2" > /dev/null 2>&1; then
         ok "$1"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         err "$1"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
