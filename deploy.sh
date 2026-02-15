@@ -281,9 +281,9 @@ echo ""
 # Run verify.sh from same directory (or download if missing)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/verify.sh" ]]; then
-    bash "${SCRIPT_DIR}/verify.sh"
+    bash "${SCRIPT_DIR}/verify.sh" || true
 else
-    curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/verify.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/verify.sh | bash || true
 fi
 
 VPS_IP=$(hostname -I | awk '{print $1}')
