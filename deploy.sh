@@ -81,12 +81,13 @@ if id "$USERNAME" &>/dev/null; then
     warn "User '${USERNAME}' already exists, skipping creation."
 else
     adduser --disabled-password --gecos "" "$USERNAME"
-    usermod -aG sudo "$USERNAME"
-    # Set a password for the user (required for sudo)
-    echo -e "${CYAN}Set a password for '${USERNAME}' (needed for sudo):${NC}"
-    passwd "$USERNAME"
-    ok "User '${USERNAME}' created with sudo access (password required for sudo)."
+    ok "User '${USERNAME}' created."
 fi
+
+# Configure passwordless sudo for clawdbot
+echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/${USERNAME}"
+chmod 440 "/etc/sudoers.d/${USERNAME}"
+ok "Passwordless sudo configured for '${USERNAME}'."
 
 # SSH key
 mkdir -p "/home/${USERNAME}/.ssh"
