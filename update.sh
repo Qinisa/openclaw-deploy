@@ -25,6 +25,18 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 MODE="${1:-all}"
 
+# --- Ensure passwordless sudo for clawdbot ---
+USERNAME="clawdbot"
+SUDOERS_FILE="/etc/sudoers.d/${USERNAME}"
+if [[ ! -f "$SUDOERS_FILE" ]] || ! grep -q "NOPASSWD:ALL" "$SUDOERS_FILE" 2>/dev/null; then
+    log "Configuring passwordless sudo for ${USERNAME}..."
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | sudo tee "$SUDOERS_FILE" > /dev/null
+    sudo chmod 440 "$SUDOERS_FILE"
+    ok "Passwordless sudo configured for '${USERNAME}'."
+else
+    ok "Passwordless sudo already configured."
+fi
+
 # --- System Updates ---
 if [[ "$MODE" == "all" || "$MODE" == "--system-only" ]]; then
     log "Updating system packages..."
