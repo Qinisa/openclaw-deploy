@@ -63,8 +63,8 @@ if [[ "$MODE" == "all" || "$MODE" == "--openclaw-only" ]]; then
     fi
 
     # Run doctor to handle config migrations, health checks, and service entrypoint updates
-    log "Running openclaw doctor..."
-    openclaw doctor || warn "Doctor reported issues — review output above."
+    log "Running openclaw doctor --fix..."
+    openclaw doctor --fix --non-interactive || warn "Doctor reported issues — review output above."
 
     # Restart gateway
     log "Restarting OpenClaw gateway..."
