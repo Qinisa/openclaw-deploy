@@ -9,17 +9,20 @@
 #   bash deploy.sh
 #
 # What it does:
-#   1. Creates 'clawdbot' user with SSH key auth
-#   2. Hardens SSH (no root login, no passwords)
-#   3. Configures UFW firewall
-#   4. Installs fail2ban
-#   5. Disables unnecessary services
-#   6. Applies kernel hardening
-#   7. Installs Node.js 22 LTS via NodeSource
-#   8. Installs OpenClaw globally
-#   9. Installs Chrome (headless)
-#  10. Verifies everything
-#  13. Prompts user to log in as clawdbot and run: openclaw onboard --install-daemon
+#   1.  Creates 'clawdbot' user with scoped sudo & SSH key auth
+#   2.  Hardens SSH (no root login, no passwords)
+#   3.  Configures UFW firewall
+#   4.  Installs fail2ban
+#   5.  Disables unnecessary services
+#   6.  Applies kernel hardening
+#   7.  System updates + unattended-upgrades
+#   8.  Configures swap (2GB swapfile)
+#   9.  Configures log rotation (journald + logrotate)
+#  10.  Installs Node.js 22 LTS via NodeSource
+#  11.  Installs OpenClaw globally
+#  12.  Installs Chrome (headless)
+#  13.  Docker Sandboxing (optional)
+#  14.  Verification & next steps
 #
 # Designed for: Ubuntu 24.04 LTS on Hetzner Cloud
 # Author: CrawBot 🦞
@@ -61,10 +64,23 @@ echo ""
 USERNAME="clawdbot"
 NODE_MAJOR=22
 
-# Prompt for SSH public key
+# --- Pipe safety: detect non-interactive mode ---
+INTERACTIVE=true
+if [[ ! -t 0 ]]; then
+    INTERACTIVE=false
+    log "Non-interactive mode detected (piped input). Using environment variables."
+fi
+
+# Prompt for SSH public key (or use env var)
 if [[ -z "${SSH_PUBKEY:-}" ]]; then
-    echo -e "${CYAN}Paste the SSH public key for the '${USERNAME}' user:${NC}"
-    read -r SSH_PUBKEY
+    if $INTERACTIVE; then
+        echo -e "${CYAN}Paste the SSH public key for the '${USERNAME}' user:${NC}"
+        read -r SSH_PUBKEY
+    else
+        err "SSH_PUBKEY environment variable is required when running non-interactively."
+        err "Usage: SSH_PUBKEY='ssh-ed25519 AAAA...' curl -fsSL ... | bash"
+        exit 1
+    fi
 fi
 
 if [[ -z "$SSH_PUBKEY" ]]; then
@@ -73,9 +89,9 @@ if [[ -z "$SSH_PUBKEY" ]]; then
 fi
 
 # ============================================================================
-# PHASE 1: User Setup
+# PHASE 1: User Setup (scoped sudo)
 # ============================================================================
-log "Phase 1: Creating user '${USERNAME}'..."
+log "Phase 1: Creating user '${USERNAME}' with scoped sudo..."
 
 if id "$USERNAME" &>/dev/null; then
     warn "User '${USERNAME}' already exists, skipping creation."
@@ -84,10 +100,25 @@ else
     ok "User '${USERNAME}' created."
 fi
 
-# Configure passwordless sudo for clawdbot
-echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/${USERNAME}"
+# Configure scoped passwordless sudo (least-privilege)
+cat > "/etc/sudoers.d/${USERNAME}" << 'SUDOEOF'
+# OpenClaw scoped sudo — least-privilege, no blanket NOPASSWD:ALL
+Cmnd_Alias OPENCLAW_SVC = /usr/bin/systemctl, /usr/sbin/ufw, /usr/bin/fail2ban-client, \
+    /usr/bin/journalctl, /usr/sbin/reboot, /usr/sbin/sysctl, \
+    /usr/sbin/sshd, /usr/bin/dpkg-reconfigure
+Cmnd_Alias OPENCLAW_PKG = /usr/bin/apt-get, /usr/bin/apt, /usr/bin/dpkg, \
+    /usr/bin/wget, /usr/bin/curl
+Cmnd_Alias OPENCLAW_DOCKER = /usr/bin/docker, /usr/bin/dockerd, \
+    /usr/sbin/usermod, /usr/sbin/adduser
+Cmnd_Alias OPENCLAW_FS = /usr/bin/tee, /usr/bin/install, /usr/bin/mkdir, \
+    /bin/chmod, /bin/chown, /usr/bin/chmod, /usr/bin/chown, \
+    /bin/rm, /usr/bin/rm, /bin/sed, /usr/bin/sed, /bin/cat, /usr/bin/cat, \
+    /bin/mv, /usr/bin/mv, /bin/cp, /usr/bin/cp, \
+    /usr/bin/gpg
+clawdbot ALL=(ALL) NOPASSWD: OPENCLAW_SVC, OPENCLAW_PKG, OPENCLAW_DOCKER, OPENCLAW_FS
+SUDOEOF
 chmod 440 "/etc/sudoers.d/${USERNAME}"
-ok "Passwordless sudo configured for '${USERNAME}'."
+ok "Scoped sudo configured for '${USERNAME}' (least-privilege)."
 
 # SSH key
 mkdir -p "/home/${USERNAME}/.ssh"
@@ -106,13 +137,9 @@ ok "SSH key configured."
 # ============================================================================
 log "Phase 2: Hardening SSH..."
 
-# Disable root login
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-
-# Disable password authentication in main config
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Also enforce via sshd_config.d drop-in (belt and suspenders)
 cat > /etc/ssh/sshd_config.d/hardening.conf << 'SSHEOF'
 PermitRootLogin no
 PasswordAuthentication no
@@ -125,9 +152,7 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 SSHEOF
 
-# Remove cloud-init SSH override if present (often re-enables password auth)
 rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf
-
 systemctl restart ssh
 ok "SSH hardened: root login disabled, password auth disabled, key-only access."
 
@@ -139,12 +164,9 @@ log "Phase 3: Configuring firewall..."
 apt-get update -qq
 apt-get install -y -qq ufw > /dev/null 2>&1
 
-# Set defaults before enabling — deny first, then whitelist
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp comment "SSH"
-
-# Enable (--force skips interactive prompt)
 ufw --force enable
 ok "UFW enabled: default deny incoming, SSH (22/tcp) allowed."
 
@@ -174,7 +196,6 @@ ok "Fail2ban installed and configured (3 retries, 1h ban)."
 # ============================================================================
 log "Phase 5: Disabling unnecessary services..."
 
-# CUPS (printing) — often enabled by default
 systemctl disable --now snap.cups.cupsd snap.cups.cups-browsed 2>/dev/null || true
 ok "Unnecessary services disabled."
 
@@ -184,24 +205,15 @@ ok "Unnecessary services disabled."
 log "Phase 6: Applying kernel hardening..."
 
 cat > /etc/sysctl.d/99-hardening.conf << 'KERNEOF'
-# Disable ICMP redirects
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
-
-# Ignore ICMP broadcast requests
 net.ipv4.icmp_echo_ignore_broadcasts = 1
-
-# Enable SYN flood protection
 net.ipv4.tcp_syncookies = 1
-
-# Disable IP forwarding (not a router)
 net.ipv4.ip_forward = 0
-
-# Log martian packets
 net.ipv4.conf.all.log_martians = 1
 net.ipv4.conf.default.log_martians = 1
 KERNEOF
@@ -216,52 +228,110 @@ log "Phase 7: Applying system updates..."
 
 apt-get upgrade -y -qq > /dev/null 2>&1
 apt-get install -y -qq curl git build-essential > /dev/null 2>&1
-
-# Install unattended-upgrades for automatic security patches
 apt-get install -y -qq unattended-upgrades > /dev/null 2>&1
 dpkg-reconfigure -plow unattended-upgrades 2>/dev/null || true
 ok "System updated, unattended-upgrades enabled."
 
 # ============================================================================
-# PHASE 8: Install Node.js
+# PHASE 8: Swap Configuration
 # ============================================================================
-log "Phase 8: Installing Node.js ${NODE_MAJOR}..."
+log "Phase 8: Configuring swap..."
+
+SWAP_SIZE="2G"
+SWAP_FILE="/swapfile"
+
+if swapon --show | grep -q "$SWAP_FILE"; then
+    ok "Swap already configured ($(swapon --show --noheadings | awk '{print $3}'))."
+elif swapon --show | grep -q "/"; then
+    ok "Swap already active ($(swapon --show --noheadings | awk '{print $1, $3}'))."
+else
+    fallocate -l "$SWAP_SIZE" "$SWAP_FILE"
+    chmod 600 "$SWAP_FILE"
+    mkswap "$SWAP_FILE" > /dev/null 2>&1
+    swapon "$SWAP_FILE"
+
+    # Persist across reboots
+    if ! grep -q "$SWAP_FILE" /etc/fstab; then
+        echo "$SWAP_FILE none swap sw 0 0" >> /etc/fstab
+    fi
+
+    # Tune swappiness for server workload
+    sysctl vm.swappiness=10 > /dev/null 2>&1
+    echo "vm.swappiness=10" > /etc/sysctl.d/99-swap.conf
+
+    ok "Swap configured: ${SWAP_SIZE} swapfile, swappiness=10."
+fi
+
+# ============================================================================
+# PHASE 9: Log Rotation
+# ============================================================================
+log "Phase 9: Configuring log rotation..."
+
+# Journald size limits
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/size-limit.conf << 'JOURNALEOF'
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=50M
+MaxRetentionSec=30day
+JOURNALEOF
+systemctl restart systemd-journald 2>/dev/null || true
+
+# Logrotate for OpenClaw logs
+cat > /etc/logrotate.d/openclaw << 'LOGEOF'
+/home/clawdbot/.openclaw/logs/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 clawdbot clawdbot
+    sharedscripts
+    postrotate
+        systemctl reload openclaw 2>/dev/null || true
+    endscript
+}
+LOGEOF
+
+ok "Log rotation configured (journald 500M, logrotate 14 days)."
+
+# ============================================================================
+# PHASE 10: Install Node.js
+# ============================================================================
+log "Phase 10: Installing Node.js ${NODE_MAJOR}..."
 
 if command -v node &>/dev/null && node -v | grep -q "v${NODE_MAJOR}"; then
     ok "Node.js $(node -v) already installed."
 else
-    # NodeSource setup
     curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - > /dev/null 2>&1
     apt-get install -y -qq nodejs > /dev/null 2>&1
     ok "Node.js $(node -v) installed."
 fi
 
 # ============================================================================
-# PHASE 9: Install OpenClaw
+# PHASE 11: Install OpenClaw
 # ============================================================================
-log "Phase 9: Installing OpenClaw..."
+log "Phase 11: Installing OpenClaw..."
 
-# Set up npm global directory for clawdbot user (no sudo needed for npm)
 sudo -u "$USERNAME" bash << 'NPMEOF'
 mkdir -p ~/.npm-global
 npm config set prefix "$HOME/.npm-global"
 
-# Add to PATH if not already there
 if ! grep -q ".npm-global/bin" ~/.bashrc 2>/dev/null; then
     echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
 fi
 export PATH="$HOME/.npm-global/bin:$PATH"
 
-# Install OpenClaw
 npm install -g openclaw
 NPMEOF
 
 ok "OpenClaw installed: $(sudo -u "$USERNAME" bash -c 'export PATH="$HOME/.npm-global/bin:$PATH" && openclaw --version')"
 
 # ============================================================================
-# PHASE 10: Install Chrome (for browser tools)
+# PHASE 12: Install Chrome (for browser tools)
 # ============================================================================
-log "Phase 10: Installing Chrome (headless)..."
+log "Phase 12: Installing Chrome (headless)..."
 
 if command -v google-chrome &>/dev/null; then
     ok "Chrome already installed."
@@ -272,36 +342,25 @@ else
     ok "Chrome installed."
 fi
 
-
 # ============================================================================
-# PHASE 11: Docker Sandboxing (Optional)
+# PHASE 13: Docker Sandboxing (Optional)
 # ============================================================================
 echo ""
-echo -e "${YELLOW}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║  Optional: Docker Sandboxing                            ║${NC}"
-echo -e "${YELLOW}╠══════════════════════════════════════════════════════════╣${NC}"
-echo -e "${YELLOW}║                                                          ║${NC}"
-echo -e "${YELLOW}║  Sandboxing runs agent tools inside Docker containers    ║${NC}"
-echo -e "${YELLOW}║  so rogue commands can't access the host filesystem.     ║${NC}"
-echo -e "${YELLOW}║  Your main chat session keeps full host access.          ║${NC}"
-echo -e "${YELLOW}║                                                          ║${NC}"
-echo -e "${YELLOW}║  ${GREEN}RECOMMENDED for:${YELLOW}                                        ║${NC}"
-echo -e "${YELLOW}║    • Multi-user setups (exec teams, shared bots)         ║${NC}"
-echo -e "${YELLOW}║    • Bots with access to sensitive credentials           ║${NC}"
-echo -e "${YELLOW}║    • Public-facing or large server deployments           ║${NC}"
-echo -e "${YELLOW}║                                                          ║${NC}"
-echo -e "${YELLOW}║  ${RED}NOT recommended for:${YELLOW}                                    ║${NC}"
-echo -e "${YELLOW}║    • Solo dev workflows where the bot needs full         ║${NC}"
-echo -e "${YELLOW}║      filesystem access across all channels               ║${NC}"
-echo -e "${YELLOW}║    • Software development setups with repo access        ║${NC}"
-echo -e "${YELLOW}║                                                          ║${NC}"
-echo -e "${YELLOW}╚══════════════════════════════════════════════════════════╝${NC}"
+echo -e "${YELLOW}╔══════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║  Optional: Docker Sandboxing                        ║${NC}"
+echo -e "${YELLOW}║                                                     ║${NC}"
+echo -e "${YELLOW}║  Runs agent tools (exec, read, write) inside        ║${NC}"
+echo -e "${YELLOW}║  Docker containers so a rogue command can't trash   ║${NC}"
+echo -e "${YELLOW}║  the host. Your main chat keeps full host access.   ║${NC}"
+echo -e "${YELLOW}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 if [[ "${ENABLE_SANDBOX:-}" == "y" ]]; then
     SETUP_SANDBOX="y"
-else
+elif $INTERACTIVE; then
     read -rp "$(echo -e "${CYAN}Enable Docker sandboxing? [y/N]:${NC} ")" SETUP_SANDBOX
+else
+    SETUP_SANDBOX="${ENABLE_SANDBOX:-n}"
 fi
 
 if [[ "${SETUP_SANDBOX,,}" == "y" || "${SETUP_SANDBOX,,}" == "yes" ]]; then
@@ -323,7 +382,7 @@ if [[ "${SETUP_SANDBOX,,}" == "y" || "${SETUP_SANDBOX,,}" == "yes" ]]; then
 
     TMPDIR=$(mktemp -d)
     cat > "$TMPDIR/Dockerfile" << 'DOCKERFILE'
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:ad86386827b083b3d71571f8e544a9cdd1d388b7c2d5efa99743c1a3b7b19eb4
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -350,17 +409,16 @@ DOCKERFILE
     SANDBOX_INSTALLED=true
 
 else
-    log "Skipping Docker sandboxing. Enable later with: bash sandbox-setup.sh"
+    log "Skipping Docker sandboxing. Enable later with: bash update.sh --sandbox"
 fi
 
 # ============================================================================
-# PHASE 12: Verification
+# PHASE 14: Verification & Next Steps
 # ============================================================================
 echo ""
-log "Phase 12: Running verification checks..."
+log "Phase 14: Running verification checks..."
 echo ""
 
-# Run verify.sh from same directory (or download if missing)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/verify.sh" ]]; then
     bash "${SCRIPT_DIR}/verify.sh" || true
@@ -392,7 +450,7 @@ if [[ "${SANDBOX_INSTALLED:-false}" == "true" ]]; then
     echo ""
     echo -e "  3. Enable Docker sandboxing:"
     echo ""
-    echo -e "     ${GREEN}bash sandbox-setup.sh${NC}"
+    echo -e "     ${GREEN}bash update.sh --sandbox${NC}"
     echo ""
     echo -e "  This patches the OpenClaw config to sandbox sub-agent"
     echo -e "  and group chat sessions in Docker containers."
