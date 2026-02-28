@@ -19,10 +19,10 @@ QUIET=false
 SERVICE="openclaw"
 LOG_FILE="/home/clawdbot/.openclaw/logs/healthcheck.log"
 MAX_RESTART_ATTEMPTS=3
-RESTART_COOLDOWN=300  # 5 minutes between restart attempts
 
 log() {
-    local msg="[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*"
+    local msg
+    msg="[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*"
     mkdir -p "$(dirname "$LOG_FILE")"
     echo "$msg" >> "$LOG_FILE"
     $QUIET || echo "$msg"
@@ -45,7 +45,6 @@ log "WARNING: $SERVICE is not running"
 # Check recent restart attempts to avoid restart loops
 RECENT_RESTARTS=0
 if [[ -f "$LOG_FILE" ]]; then
-    CUTOFF=$(date -u -d "$RESTART_COOLDOWN seconds ago" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -u '+%Y-%m-%d %H:%M:%S')
     RECENT_RESTARTS=$(grep -c "Attempting restart" "$LOG_FILE" 2>/dev/null || echo 0)
 fi
 
