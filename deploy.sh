@@ -335,8 +335,8 @@ DOCKERFILE
     docker build -t "openclaw-sandbox:bookworm-slim" -f "$TMPDIR/Dockerfile" "$TMPDIR" > /dev/null 2>&1
     rm -rf "$TMPDIR"
     ok "Sandbox image built: openclaw-sandbox:bookworm-slim"
+    SANDBOX_INSTALLED=true
 
-    warn "Sandbox config will be applied when you run 'bash update.sh' after onboarding."
 else
     log "Skipping Docker sandboxing. Enable later with: bash update.sh --sandbox"
 fi
@@ -375,5 +375,16 @@ echo -e "     ${GREEN}openclaw onboard --install-daemon${NC}"
 echo ""
 echo -e "  This will configure OpenClaw (API keys, Telegram bot,"
 echo -e "  etc.) and install it as a system daemon."
+
+if [[ "${SANDBOX_INSTALLED:-false}" == "true" ]]; then
+    echo ""
+    echo -e "  3. Enable Docker sandboxing:"
+    echo ""
+    echo -e "     ${GREEN}bash update.sh --sandbox${NC}"
+    echo ""
+    echo -e "  This patches the OpenClaw config to sandbox sub-agent"
+    echo -e "  and group chat sessions in Docker containers."
+fi
+
 echo ""
 echo -e "🦞 ${CYAN}Server hardening complete. Log in as ${USERNAME} to finish setup.${NC}"
