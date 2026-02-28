@@ -35,24 +35,19 @@ SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" bash deploy.sh
 | 10 | Installs Chrome (headless, for browser tools) |
 | 11 | Verification checklist |
 
-After the script completes, log in as `clawdbot` and run:
+## After Deploy
+
+Log in as `clawdbot` and run:
 
 ```bash
 openclaw onboard --install-daemon
 ```
 
-This configures OpenClaw (API keys, Telegram bot, etc.) and installs it as a system daemon.
-
 ## Maintenance
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash
-```
-
-Or with options:
-
-```bash
 # Full update (system + OpenClaw + verify)
+# Will ask if you want to enable Docker sandboxing if not already set up
 bash update.sh
 
 # Just OpenClaw
@@ -63,7 +58,22 @@ bash update.sh --system-only
 
 # Just run verification checks
 bash update.sh --verify-only
+
+# Enable Docker sandboxing (non-interactive)
+bash update.sh --sandbox
 ```
+
+### Docker Sandboxing
+
+The update script will detect if Docker sandboxing isn't enabled and offer to set it up. This isolates agent tool execution (exec, read, write) in Docker containers:
+
+- **Main chat session** → runs on host with full access
+- **Sub-agents & group chats** → sandboxed in Docker containers
+- Rogue commands can't trash the host filesystem
+- No network access from sandbox by default
+- Resource limits prevent runaway processes
+
+To enable directly: `bash update.sh --sandbox`
 
 ## Requirements
 
@@ -80,6 +90,7 @@ bash update.sh --verify-only
 - Kernel hardening (SYN cookies, ICMP restrictions)
 - Automatic security updates
 - Systemd security sandboxing (NoNewPrivileges, ProtectSystem)
+- Optional Docker sandboxing for agent tool isolation
 
 ## License
 
