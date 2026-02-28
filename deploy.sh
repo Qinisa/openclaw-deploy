@@ -350,7 +350,7 @@ DOCKERFILE
     SANDBOX_INSTALLED=true
 
 else
-    log "Skipping Docker sandboxing. Enable later with: bash update.sh --sandbox"
+    log "Skipping Docker sandboxing. Enable later with: bash sandbox-setup.sh"
 fi
 
 # ============================================================================
@@ -392,7 +392,7 @@ if [[ "${SANDBOX_INSTALLED:-false}" == "true" ]]; then
     echo ""
     echo -e "  3. Enable Docker sandboxing:"
     echo ""
-    echo -e "     ${GREEN}bash update.sh --sandbox${NC}"
+    echo -e "     ${GREEN}bash sandbox-setup.sh${NC}"
     echo ""
     echo -e "  This patches the OpenClaw config to sandbox sub-agent"
     echo -e "  and group chat sessions in Docker containers."

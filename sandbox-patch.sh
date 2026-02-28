@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Convenience wrapper — runs the sandbox step from update.sh
-# For full options, use: bash update.sh --sandbox
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "${SCRIPT_DIR}/update.sh" --sandbox
+# Deprecated — use sandbox-setup.sh instead
+echo "This script has been replaced by sandbox-setup.sh"
+echo "Run: bash sandbox-setup.sh"
+exit 1

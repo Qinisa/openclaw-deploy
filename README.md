@@ -33,7 +33,8 @@ SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)" bash deploy.sh
 | 8 | Installs Node.js 22 LTS |
 | 9 | Installs OpenClaw |
 | 10 | Installs Chrome (headless, for browser tools) |
-| 11 | Verification checklist |
+| 11 | Optional: Docker sandboxing |
+| 12 | Verification checklist |
 
 ## After Deploy
 
@@ -47,7 +48,6 @@ openclaw onboard --install-daemon
 
 ```bash
 # Full update (system + OpenClaw + verify)
-# Will ask if you want to enable Docker sandboxing if not already set up
 bash update.sh
 
 # Just OpenClaw
@@ -58,22 +58,29 @@ bash update.sh --system-only
 
 # Just run verification checks
 bash update.sh --verify-only
-
-# Enable Docker sandboxing (non-interactive)
-bash update.sh --sandbox
 ```
 
-### Docker Sandboxing
+## Docker Sandboxing (Optional)
 
-The update script will detect if Docker sandboxing isn't enabled and offer to set it up. This isolates agent tool execution (exec, read, write) in Docker containers:
+Isolate agent tool execution in Docker containers. Run after deploy + onboarding:
 
-- **Main chat session** → runs on host with full access
-- **Sub-agents & group chats** → sandboxed in Docker containers
-- Rogue commands can't trash the host filesystem
-- No network access from sandbox by default
-- Resource limits prevent runaway processes
+```bash
+bash sandbox-setup.sh            # Interactive setup
+bash sandbox-setup.sh --dry-run  # Preview changes
+```
 
-To enable directly: `bash update.sh --sandbox`
+**Recommended for:**
+- Multi-user setups (exec teams, shared bots)
+- Bots with access to sensitive credentials (email, CRM, banking)
+- Public-facing or large server deployments
+
+**Not recommended for:**
+- Solo dev workflows needing full filesystem access across all channels
+- Software development setups with repo access from non-main sessions
+
+When enabled:
+- **Main chat session** (direct DMs) runs on the host with full access
+- **Sub-agents, group chats, Discord channels** run tools inside Docker containers with isolated filesystems, no network, and resource limits
 
 ## Requirements
 
