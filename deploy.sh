@@ -19,7 +19,7 @@
 #   8. Installs OpenClaw globally
 #   9. Installs Chrome (headless)
 #  10. Verifies everything
-#  11. Prompts user to log in as clawdbot and run: openclaw onboard --install-daemon
+#  13. Prompts user to log in as clawdbot and run: openclaw onboard --install-daemon
 #
 # Designed for: Ubuntu 24.04 LTS on Hetzner Cloud
 # Author: CrawBot 🦞
@@ -272,11 +272,80 @@ else
     ok "Chrome installed."
 fi
 
+
 # ============================================================================
-# PHASE 11: Verification
+# PHASE 11: Docker Sandboxing (Optional)
 # ============================================================================
 echo ""
-log "Phase 11: Running verification checks..."
+echo -e "${YELLOW}╔══════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║  Optional: Docker Sandboxing                        ║${NC}"
+echo -e "${YELLOW}║                                                     ║${NC}"
+echo -e "${YELLOW}║  Runs agent tools (exec, read, write) inside        ║${NC}"
+echo -e "${YELLOW}║  Docker containers so a rogue command can't trash   ║${NC}"
+echo -e "${YELLOW}║  the host. Your main chat keeps full host access.   ║${NC}"
+echo -e "${YELLOW}╚══════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+if [[ "${ENABLE_SANDBOX:-}" == "y" ]]; then
+    SETUP_SANDBOX="y"
+else
+    read -rp "$(echo -e "${CYAN}Enable Docker sandboxing? [y/N]:${NC} ")" SETUP_SANDBOX
+fi
+
+if [[ "${SETUP_SANDBOX,,}" == "y" || "${SETUP_SANDBOX,,}" == "yes" ]]; then
+    log "Installing Docker and building sandbox image..."
+
+    apt-get install -y -qq ca-certificates curl gnupg > /dev/null 2>&1
+    install -m 0755 -d /etc/apt/keyrings
+    if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
+        chmod a+r /etc/apt/keyrings/docker.gpg
+    fi
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin > /dev/null 2>&1
+    ok "Docker installed."
+
+    usermod -aG docker "$USERNAME"
+    ok "User '${USERNAME}' added to docker group."
+
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/Dockerfile" << 'DOCKERFILE'
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    python3 \
+    ripgrep \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+CMD ["sleep", "infinity"]
+DOCKERFILE
+    docker build -t "openclaw-sandbox:bookworm-slim" -f "$TMPDIR/Dockerfile" "$TMPDIR" > /dev/null 2>&1
+    rm -rf "$TMPDIR"
+    ok "Sandbox image built: openclaw-sandbox:bookworm-slim"
+
+    warn "Sandbox config will be applied when you run 'bash update.sh' after onboarding."
+else
+    log "Skipping Docker sandboxing. Enable later with: bash update.sh --sandbox"
+fi
+
+# ============================================================================
+# PHASE 12: Verification
+# ============================================================================
+echo ""
+log "Phase 12: Running verification checks..."
 echo ""
 
 # Run verify.sh from same directory (or download if missing)
