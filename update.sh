@@ -84,7 +84,7 @@ if [[ "$MODE" == "all" || "$MODE" == "--openclaw-only" ]]; then
 fi
 
 # --- Docker Sandbox Check ---
-if [[ "$MODE" == "all" || "$MODE" == "--sandbox" ]]; then
+if [[ "$MODE" == "--sandbox" ]]; then
     echo ""
 
     # Check if sandbox is already configured
@@ -98,25 +98,7 @@ if [[ "$MODE" == "all" || "$MODE" == "--sandbox" ]]; then
     fi
 
     if ! $SANDBOX_CONFIGURED; then
-        echo ""
-        echo -e "${YELLOW}╔══════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║  Docker sandboxing is not enabled.                  ║${NC}"
-        echo -e "${YELLOW}║                                                     ║${NC}"
-        echo -e "${YELLOW}║  Sandboxing runs agent tools (exec, read, write)    ║${NC}"
-        echo -e "${YELLOW}║  inside Docker containers, so a rogue command       ║${NC}"
-        echo -e "${YELLOW}║  can't trash the host. Your main chat stays on      ║${NC}"
-        echo -e "${YELLOW}║  the host with full access.                         ║${NC}"
-        echo -e "${YELLOW}╚══════════════════════════════════════════════════════╝${NC}"
-        echo ""
-
-        if [[ "$MODE" == "--sandbox" ]]; then
-            # Explicit --sandbox flag: don't ask, just do it
-            ENABLE_SANDBOX="y"
-        else
-            read -rp "$(echo -e "${CYAN}Enable Docker sandboxing? [y/N]:${NC} ")" ENABLE_SANDBOX
-        fi
-
-        if [[ "${ENABLE_SANDBOX,,}" == "y" || "${ENABLE_SANDBOX,,}" == "yes" ]]; then
+        log "Setting up Docker sandboxing..."
             log "Setting up Docker sandboxing..."
 
             # --- Install Docker ---
@@ -218,9 +200,6 @@ DOCKERFILE
             echo -e "  Main chat → host (full access)"
             echo -e "  Sub-agents & groups → sandboxed in Docker"
             echo -e "  Commands: ${CYAN}openclaw sandbox list${NC} / ${CYAN}openclaw sandbox explain${NC}"
-        else
-            warn "Skipping Docker sandboxing. Run again with --sandbox to enable later."
-        fi
     fi
 fi
 
