@@ -46,18 +46,35 @@ openclaw onboard --install-daemon
 
 ## Maintenance
 
+All scripts can be run as one-liners via curl:
+
 ```bash
 # Full update (system + OpenClaw + verify)
-bash update.sh
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash
 
 # Just OpenClaw
-bash update.sh --openclaw-only
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --openclaw-only
 
 # Just system packages
-bash update.sh --system-only
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --system-only
 
-# Just run verification checks
+# Just verification checks
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --verify-only
+```
+
+Or clone the repo and run locally:
+
+```bash
+bash update.sh
+bash update.sh --openclaw-only
+bash update.sh --system-only
 bash update.sh --verify-only
+```
+
+## Verification
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/verify.sh | sudo bash
 ```
 
 ## Docker Sandboxing (Optional)
@@ -65,8 +82,11 @@ bash update.sh --verify-only
 Isolate agent tool execution in Docker containers. Run after deploy + onboarding:
 
 ```bash
-bash sandbox-setup.sh            # Interactive setup
-bash sandbox-setup.sh --dry-run  # Preview changes
+# One-liner
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/sandbox-setup.sh | bash
+
+# Dry run (preview changes)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/sandbox-setup.sh | bash -s -- --dry-run
 ```
 
 **Recommended for:**
