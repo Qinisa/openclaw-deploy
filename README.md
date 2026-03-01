@@ -76,37 +76,44 @@ Then reload: `sudo systemctl daemon-reload && sudo systemctl restart openclaw`
 
 ## Maintenance
 
-```bash
-# Full update (system + OpenClaw + sandbox check + verify)
-bash update.sh
+All scripts can be run as one-liners via curl:
 
-# Combine flags as needed
-bash update.sh --system-only --verify-only
-bash update.sh --openclaw-only --verify-only
+```bash
+# Full update (system + OpenClaw + verify)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash
 
 # Just OpenClaw
-bash update.sh --openclaw-only
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --openclaw-only
 
 # Just system packages
-bash update.sh --system-only
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --system-only
 
-# Just run verification checks
-bash update.sh --verify-only
+# Just verification checks
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --verify-only
 
-# Enable Docker sandboxing (non-interactive)
-bash update.sh --sandbox
+# Combine flags
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/update.sh | bash -s -- --openclaw-only --verify-only
+```
+
+Or clone the repo and run locally:
+
+```bash
+git clone https://github.com/Qinisa/openclaw-deploy.git
+cd openclaw-deploy
+bash update.sh
 ```
 
 ## Health Checks
 
-A standalone health check script monitors the OpenClaw service:
-
 ```bash
-# Manual check
-bash healthcheck.sh
+# One-liner
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/healthcheck.sh | bash
 
-# Cron (every 5 minutes, quiet mode)
-*/5 * * * * /home/clawdbot/projects/openclaw-deploy/healthcheck.sh --quiet
+# Quiet mode (for cron)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/healthcheck.sh | bash -s -- --quiet
+
+# Cron (every 5 minutes)
+*/5 * * * * curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/healthcheck.sh | bash -s -- --quiet
 ```
 
 Features: auto-restart with cooldown, loop protection (max 3 attempts), logging.
@@ -116,30 +123,48 @@ Features: auto-restart with cooldown, loop protection (max 3 attempts), logging.
 Back up `~/.openclaw/` (config, workspace, memory, sessions):
 
 ```bash
-# Manual backup
-bash backup.sh
+# One-liner
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/backup.sh | bash
 
-# Custom location
-BACKUP_DIR=/mnt/backups bash backup.sh
+# Custom backup location
+BACKUP_DIR=/mnt/backups curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/backup.sh | bash
 
-# Cron (daily at 3am, quiet mode)
-0 3 * * * /home/clawdbot/projects/openclaw-deploy/backup.sh --quiet
+# Quiet mode (for cron)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/backup.sh | bash -s -- --quiet
+
+# Cron (daily at 3am)
+0 3 * * * curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/backup.sh | bash -s -- --quiet
 ```
 
 Features: 7-day rotation, excludes transient files, size reporting.
 
-### Docker Sandboxing
+## Verification
 
-The update script will detect if Docker sandboxing isn't enabled and offer to set it up. This isolates agent tool execution (exec, read, write) in Docker containers:
+```bash
+# One-liner (run as root or with sudo)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/verify.sh | sudo bash
+```
+
+## Docker Sandboxing (Optional)
+
+```bash
+# One-liner
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/sandbox-setup.sh | bash
+
+# Dry run (preview changes)
+curl -fsSL https://raw.githubusercontent.com/Qinisa/openclaw-deploy/main/sandbox-setup.sh | bash -s -- --dry-run
+```
+
+Sandboxing isolates agent tool execution in Docker containers:
 
 - **Main chat session** → runs on host with full access
 - **Sub-agents & group chats** → sandboxed in Docker containers
 - Rogue commands can't trash the host filesystem
 - No network access from sandbox by default
 - Resource limits prevent runaway processes
-- Docker base image pinned to SHA digest for reproducibility
 
-To enable directly: `bash update.sh --sandbox`
+**Recommended for:** Multi-user setups, exec teams, bots with sensitive credentials.
+**Not recommended for:** Solo dev workflows needing full filesystem access across all channels.
 
 ## Security Features
 
@@ -164,7 +189,7 @@ To enable directly: `bash update.sh --sandbox`
 ## TODO (nice-to-haves for exec-grade)
 
 - [ ] **Tailscale/VPN option** — avoid exposing SSH to the internet
-- [ ] **Auto-update timer** — systemd timer for automatic OpenClaw updates (unattended-upgrades only covers OS packages)
+- [ ] **Auto-update timer** — systemd timer for automatic OpenClaw updates
 - [ ] **Configurable username** — currently hardcoded to `clawdbot`
 - [ ] **Multi-agent support** — deploy per-exec agents (à la SetupClaw)
 
